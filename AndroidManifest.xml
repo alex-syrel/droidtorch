@@ -12,6 +12,19 @@
         android:icon="@drawable/ic_launcher"
         android:label="@string/app_name"
         android:theme="@style/AppTheme" >
-    </application>
+        <receiver
+	        android:name="ch.unibe.droidtorch.TorchWidget"
+	        android:label="@string/app_name" >
+	        <intent-filter>
+	            <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+	            <action android:name="ch.unibe.droidtorch.ACTION_WIDGET_RECEIVER" />
+	        </intent-filter>
+	
+	        <meta-data
+	            android:name="android.appwidget.provider"
+	            android:resource="@xml/widget_torch" />
+    	</receiver>
+    
+    </application>   
 
 </manifest>

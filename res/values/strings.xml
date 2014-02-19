@@ -1,5 +1,5 @@
 <resources>
 
     <string name="app_name">DroidTorch</string>
-
+	<string name="widget_text">Torch</string>
 </resources>
