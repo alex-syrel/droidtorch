@@ -18,11 +18,12 @@ public class TorchWidget extends AppWidgetProvider {
 
 	public static final String ACTION_SWITCH_TORCH = "actionSwitchTorch";
 	public static final String PREF_TORCH_STATE = "torch_state";
-	public static final String FLASH_DEVICE = "/sys/class/camera/flash/rear_flash";
-		
+	public static final String FLASH_DEVICE = "/sys/class/camera/flash/rear_flash";				// samsung galaxy
+	//public static final String FLASH_DEVICE = "/sys/class/leds/led:flash_torch/brightness";			// nexus 5
+
 	@Override
 	public void onUpdate(Context context, AppWidgetManager appWidgetManager,int[] appWidgetIds) {
-				
+
 		Intent action = new Intent(context, TorchWidget.class);
 		action.setAction(ACTION_SWITCH_TORCH);
 
@@ -35,7 +36,7 @@ public class TorchWidget extends AppWidgetProvider {
 
 		boolean isOn = readTorchState(context);
 		initWidgetView(isOn, remoteViews);
-        appWidgetManager.updateAppWidget(appWidgetIds, remoteViews);
+		appWidgetManager.updateAppWidget(appWidgetIds, remoteViews);
 	}
 
 	@Override
@@ -45,17 +46,17 @@ public class TorchWidget extends AppWidgetProvider {
 		if (ACTION_SWITCH_TORCH.equals(action)) {
 			boolean isOn = readTorchState(context);
 			if (isFileExists(FLASH_DEVICE)){
-				LinuxShell.execute("echo " + (isOn ? 0 : 1) + " > " + FLASH_DEVICE);
+				LinuxShell.execute("echo " + (isOn ? 0 : 200) + " > " + FLASH_DEVICE);
 				saveTorchState(context,!isOn);
-				
+
 				// updating widget status image
 				ComponentName thisWidget = new ComponentName(context.getApplicationContext(),TorchWidget.class);
 				AppWidgetManager appWidgetManager = AppWidgetManager.getInstance(context.getApplicationContext());
 				RemoteViews remoteViews = new RemoteViews(context.getPackageName(), R.layout.torch);
 				int[] appWidgetIds = appWidgetManager.getAppWidgetIds(thisWidget);
-				
+
 				initWidgetView(!isOn, remoteViews);
-                appWidgetManager.updateAppWidget(appWidgetIds, remoteViews);
+				appWidgetManager.updateAppWidget(appWidgetIds, remoteViews);
 			}
 			else {
 				Toast.makeText(context, "Wrong flash device", Toast.LENGTH_SHORT).show();
@@ -73,7 +74,7 @@ public class TorchWidget extends AppWidgetProvider {
 		remoteViews.setImageViewResource(R.id.torch,
 				(isOn) ? R.drawable.widget_torch_on : R.drawable.widget_torch_off);
 	}
-	
+
 	/**
 	 * Returns {@code true} if file {@code filename} exists
 	 * in filesystem, {@code false} otherwise.
@@ -91,7 +92,7 @@ public class TorchWidget extends AppWidgetProvider {
 		}
 		return exists;
 	}
-	
+
 	/**
 	 * 
 	 * @param context
@@ -101,7 +102,7 @@ public class TorchWidget extends AppWidgetProvider {
 		SharedPreferences sharedPrefs = context.getSharedPreferences(context.getPackageName(), Context.MODE_PRIVATE);
 		return sharedPrefs.getBoolean(PREF_TORCH_STATE, false);
 	}
-	
+
 	/**
 	 * 
 	 * @param context
