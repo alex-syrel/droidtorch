@@ -34,6 +34,15 @@ public abstract class ObservableAsyncTask<INPUT,PROGRESS,RESULT> extends AsyncTa
 		if (mOnTaskCompleted != null) mOnTaskCompleted.onTaskCompleted(this);
 	}
 	
+	@Override
+	protected RESULT doInBackground(INPUT... params) {
+		assert params != null;
+		assert params.length == 1;
+		return doInBackground(params[0]);
+	}
+	
+	protected abstract RESULT doInBackground(INPUT input);
+	
 	public ObservableAsyncTask<INPUT,PROGRESS,RESULT> setOnTaskCompletedListener(OnTaskCompletedListener<INPUT,PROGRESS,RESULT> l){
 		this.mOnTaskCompleted = l;
 		return this;
