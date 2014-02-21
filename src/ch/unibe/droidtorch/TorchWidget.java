@@ -1,7 +1,8 @@
 package ch.unibe.droidtorch;
 
-import java.io.BufferedReader;
-import java.io.IOException;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.concurrent.ExecutionException;
 
 import android.app.PendingIntent;
 import android.appwidget.AppWidgetManager;
@@ -11,19 +12,31 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.SharedPreferences.Editor;
+import android.os.AsyncTask;
 import android.widget.RemoteViews;
 import android.widget.Toast;
+
+import ch.unibe.droidtorch.ObservableAsyncTask.OnTaskCompletedListener;
 
 public class TorchWidget extends AppWidgetProvider {
 
 	public static final String ACTION_SWITCH_TORCH = "actionSwitchTorch";
 	public static final String PREF_TORCH_STATE = "torch_state";
-	public static final String FLASH_DEVICE = "/sys/class/camera/flash/rear_flash";				// samsung galaxy
-	//public static final String FLASH_DEVICE = "/sys/class/leds/led:flash_torch/brightness";			// nexus 5
-
+	public static final String PREF_TORCH_DEVICE = "torch_device";
+	
+	private boolean lock = false;
+	
+	public static final LinkedList<Device> TORCH_DEVICES;
+	static {
+		TORCH_DEVICES = new LinkedList<Device>();
+		TORCH_DEVICES.add(Device.SAMSUNG_GALAXY_S4);
+		TORCH_DEVICES.add(Device.NEXUS_5);
+	}
+		
 	@Override
 	public void onUpdate(Context context, AppWidgetManager appWidgetManager,int[] appWidgetIds) {
 
+		System.out.println("update");
 		Intent action = new Intent(context, TorchWidget.class);
 		action.setAction(ACTION_SWITCH_TORCH);
 
@@ -42,28 +55,67 @@ public class TorchWidget extends AppWidgetProvider {
 	@Override
 	public void onReceive(Context context, Intent intent) {
 		final String action = intent.getAction();
-
+		System.out.println("receive");
 		if (ACTION_SWITCH_TORCH.equals(action)) {
-			boolean isOn = readTorchState(context);
-			if (isFileExists(FLASH_DEVICE)){
-				LinuxShell.execute("echo " + (isOn ? 0 : 200) + " > " + FLASH_DEVICE);
-				saveTorchState(context,!isOn);
-
-				// updating widget status image
-				ComponentName thisWidget = new ComponentName(context.getApplicationContext(),TorchWidget.class);
-				AppWidgetManager appWidgetManager = AppWidgetManager.getInstance(context.getApplicationContext());
-				RemoteViews remoteViews = new RemoteViews(context.getPackageName(), R.layout.torch);
-				int[] appWidgetIds = appWidgetManager.getAppWidgetIds(thisWidget);
-
-				initWidgetView(!isOn, remoteViews);
-				appWidgetManager.updateAppWidget(appWidgetIds, remoteViews);
+			Device device = null;
+			String name = readTorchDevice(context);
+			try {
+				if (name != null) device = Device.valueOf(name);
 			}
-			else {
-				Toast.makeText(context, "Wrong flash device", Toast.LENGTH_SHORT).show();
+			catch (IllegalArgumentException e){
+				e.printStackTrace();
 			}
+			if (device == null)	
+				selectTorchDevice(context);
+			else 
+				switchTorch(context,device);
 		}
 		super.onReceive(context, intent);
 	}
+
+	private void switchTorch(Context context, Device device) {
+		boolean isOn = readTorchState(context);
+		LinuxShell.execute("echo " + (isOn ? 0 : device.getBrightness()) + " > " + device.getTorch());
+		saveTorchState(context,!isOn);
+
+		// updating widget status image
+		ComponentName thisWidget = new ComponentName(context.getApplicationContext(),TorchWidget.class);
+		AppWidgetManager appWidgetManager = AppWidgetManager.getInstance(context.getApplicationContext());
+		RemoteViews remoteViews = new RemoteViews(context.getPackageName(), R.layout.torch);
+		int[] appWidgetIds = appWidgetManager.getAppWidgetIds(thisWidget);
+
+		initWidgetView(!isOn, remoteViews);
+		appWidgetManager.updateAppWidget(appWidgetIds, remoteViews);
+	}
+	
+	
+	@SuppressWarnings("unchecked")
+	private void selectTorchDevice(final Context context){
+		if (lock) return;
+		lock = true;
+		new TorchDevice(new OnTaskCompletedListener<List<Device>, Void, Device>() {
+			@Override
+			public void onTaskCompleted(AsyncTask<List<Device>, Void, Device> task) {
+				Device device = null;
+				try {
+					device = task.get();
+				} catch (InterruptedException e) {
+					e.printStackTrace();
+				} catch (ExecutionException e) {
+					e.printStackTrace();
+				}
+				if (device != null){
+					saveTorchDevice(context,device.name());
+					switchTorch(context,device);
+				}
+				else {
+					Toast.makeText(context, "Wrong flash device", Toast.LENGTH_SHORT).show();
+				}
+				lock = false;
+			}
+		}).execute(TORCH_DEVICES);
+	}
+	
 
 	/**
 	 * 
@@ -75,23 +127,6 @@ public class TorchWidget extends AppWidgetProvider {
 				(isOn) ? R.drawable.widget_torch_on : R.drawable.widget_torch_off);
 	}
 
-	/**
-	 * Returns {@code true} if file {@code filename} exists
-	 * in filesystem, {@code false} otherwise.
-	 * 
-	 * @param filepath - file location
-	 * @return true if file exists, false otherwise
-	 */
-	private boolean isFileExists(String filepath){
-		BufferedReader reader = LinuxShell.execute("if test -w "+filepath+"; then echo \"true\"; else echo \"false\"; fi");
-		boolean exists = false;
-		try {
-			exists = Boolean.valueOf(reader.readLine());
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
-		return exists;
-	}
 
 	/**
 	 * 
@@ -103,6 +138,11 @@ public class TorchWidget extends AppWidgetProvider {
 		return sharedPrefs.getBoolean(PREF_TORCH_STATE, false);
 	}
 
+	private String readTorchDevice(Context context){
+		SharedPreferences sharedPrefs = context.getSharedPreferences(context.getPackageName(), Context.MODE_PRIVATE);
+		return sharedPrefs.getString(PREF_TORCH_DEVICE, null);
+	}
+	
 	/**
 	 * 
 	 * @param context
@@ -112,6 +152,18 @@ public class TorchWidget extends AppWidgetProvider {
 		SharedPreferences sharedPrefs = context.getSharedPreferences(context.getPackageName(), Context.MODE_PRIVATE);
 		Editor editor = sharedPrefs.edit();
 		editor.putBoolean(PREF_TORCH_STATE, state);
+		editor.commit();
+	}
+	
+	/**
+	 * 
+	 * @param context
+	 * @param state
+	 */
+	private void saveTorchDevice(Context context, String device){
+		SharedPreferences sharedPrefs = context.getSharedPreferences(context.getPackageName(), Context.MODE_PRIVATE);
+		Editor editor = sharedPrefs.edit();
+		editor.putString(PREF_TORCH_DEVICE, device);
 		editor.commit();
 	}
 
